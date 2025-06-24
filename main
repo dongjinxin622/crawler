@@ -1,156 +1,140 @@
-from urllib2 import Request, urlopen
-from selenium import webdriver
 from bs4 import BeautifulSoup
+import requests
 from datetime import datetime, timedelta
-import time
-import random
-import os
-import json
+from dateutil import parser
+import pandas as pd
+
+class NewsExtractor:
+    def __init__(self, day_limit):
+        self.title_list = []
+        self.link_list = []
+        self.date_list = []
+        self.day_limit = day_limit
+
+    def read_web(self, url, news_name, news_class=None):
+        response = requests.get(url)
+        html = response.text
+        soup = BeautifulSoup(html, 'html.parser')
+        if news_class == None:
+            news_list = soup.find_all(news_name)
+        else:
+            news_list = soup.find_all(news_name, class_=news_class)
+        return news_list
+
+    def extract_web(self, news_list, title_name, link_name, link_class, time_name,
+                    title_class=None, source_link=None, time_class=None):
+        # check all news and extract title, link and date遍历新闻列表项，提取新闻标题、链接和时间
+        for news_item in news_list:
+            # extract title
+            if title_class is None:
+                a_tag = news_item.find(title_name)
+            else:
+                a_tag = news_item.find(title_name, title_class)
+            title = a_tag.get_text(strip=True)
+
+            # extract link
+            links = news_item.find_all(link_name)
+            if len(links) > 1:
+                link = []
+                for lk in links:
+                    if link_class in lk.attrs:
+                        if len(link) < len(lk[link_class]):
+                            link = lk[link_class]
+
+            else:
+                if link_class is None:
+                    link = news_item.find(link_name)
+                else:
+                    link = news_item.find(link_name)[link_class]
+            if 'https' not in link:
+                link = source_link + link
+
+            # extract date
+            if time_class is not None:
+                date_element = news_item.find(time_name, class_=time_class)
+            else:
+                date_element = news_item.find(time_name)
+            date = date_element.get_text(strip=True) if date_element else None
+
+            # obtain current date
+            current_time = datetime.now()
+            current_time = current_time.date()
+            # set time limitation
+            time_limit = current_time - timedelta(days= self.day_limit)
+
+            #
+            # use dateutil.parser to analyze timestamp
+            try:
+                try:
+                    news_time = parser.parse(date)
+                    news_time = datetime.date(news_time)
+                except:
+                    date_end_index = date.find('|')
+                    if date_end_index != -1:
+                        date = date[:date_end_index].strip()
+                    news_time = parser.parse(date)
+                    news_time = datetime.date(news_time)
+            except:
+                news_time = time_limit - timedelta(days=1)
+                print('there is something wrong in date')
+                print(f"Title: {title}")
+                print(f"Link: {link}")
+                print("-" * 50)
+            # news_time = datetime.strptime(date, '%Y-%m-%d').date()
+
+            # if news is released before time limitation, then print it
+            if news_time >= time_limit:
+                # 打印提取的信息
+                print(f"Title: {title}")
+                print(f"Link: {link}")
+                print(f"Date: {news_time}")
+                print("-" * 50)
+                self.title_list.append(title)
+                self.link_list.append(link)
+                self.date_list.append(news_time)
 
 
-head = "https://www.indeed.com/"
+    def batch_get_news(self, path, sheetname):
+        df = pd.read_excel(path, sheet_name= sheetname)
+        for index, row in df.iterrows():
+            print(f'index: {index}')
+            url = row['url']
+            news_name = row['news_name']
+            news_class = row['news_class']
+            a = row.isna()
+            if a['news_class']:
+                #print('news_class is None')
+                news_class = None
+            news_list = self.read_web(url, news_name, news_class)
+            title_name = row['title_name']
+            link_name = row['link_name']
+            link_class = row['link_class']
+            time_name = row['time_name']
+            title_class = row['title_class']
+            source_link = row['source_link']
+            time_class = row['time_class']
+            if a['title_class']:
+                title_class = None
+            if a['source_link']:
+                source_link = None
+            if a['time_class']:
+                time_class = None
+            self.extract_web(news_list, title_name, link_name, link_class, time_name,
+                        title_class, source_link, time_class)
 
-chromedriver = "/Applications/chromedriver"
-os.environ["webdriver.chrome.driver"] = chromedriver
+        news_results = {}
+        news_results['Link'] = self.link_list
+        news_results['Title'] = self.title_list
+        news_results['News_date'] = self.date_list
 
-job_titles = ["data+scientist"]
-
-def get_soup(url):
-    """
-    This function get the beautifulsoup object of a webpage.
-
-    Args:
-        url (str): the link string of webpage
-
-    Returns:
-        soup (obj): beautifulsoup object
-    """
-    request = Request(url, headers={'User-Agent': 'Resistance is futile'})
-    response = urlopen(request)
-    return BeautifulSoup(response, "html.parser")
-
-def get_jobs_of_title(job_title):
-    """
-    Args:
-        job_title (str): example: 'data+scientist'
-
-    Returns:
-    """
-
-    #needed to be changed
-    num_pages = 1 #number of pages to scrape
-    page_gap_min = 3 #min sleep time between pages
-    page_gap_max = 5 #max sleep time between pages
-    job_per_page = 50 #number of jobs in one page
-    job_gap_min = 5 #min sleep time between jobs
-    job_gap_max = 6 #max sleep time between jobs
-
-    for i in range(num_pages): 
-        #sleep between each call
-        gap = random.uniform(page_gap_min,page_gap_max) 
-        time.sleep(gap)
-
-        #each page contains 50 jobs
-        tail = "jobs?q={0}&sort=date&limit={1}".format(job_title,job_per_page)
-        if i>0:
-            tail += "&start={0}".format(i*job_per_page)
-
-        #get link to joblist page
-        url = head+tail 
-         
-        #get links to webpages of jobs on the joblist
-        job_page_links = get_job_links_from_page(url)
-
-        for job_page_link in job_page_links:
-            gap = random.uniform(job_gap_min,job_gap_max) 
-            time.sleep(gap)
-            data = get_info_from_job_page(job_page_link)
-
-            print(json.dumps(data))
-
-def get_job_links_from_page(url):
-    """
-    This function gets the links of the jobs on the joblist page.
-
-    Args:
-        url (str): link to joblist page
-
-    Returns:
-        job_page_links (list): list of links to the webpages of the jobs
-    """
-
-    job_page_links = []
-    soup = get_soup(url)
-    for item in soup.find_all("a", href=True):
-        if '/rc/clk?jk=' in str(item) and 'fccid=' in str(item):
-            link = item['href'].split("clk?")[1]
-            job_page_links.append(head+'viewjob?'+link)
-    return job_page_links
-
-def get_info_from_job_page(url):
-    """
-    This function get all the useful info from the job webpage.
-
-    Args:
-        url (str): link to job webpage
-
-    Returns:
-        data (dict): dictionary with keywords: 
-                     time_stamp, original_link, job_title, location, company, description
-    """
-    soup = get_soup(url)
-    data = {}
-    time_str = soup.find('div',class_='result-link-bar').find('span').getText()
-
-    try:
-        data["time_stamp"] = get_timestamp(time_str).strftime("%d-%m-%Y %H:%M")
-        data["job_title"] = soup.find('b', class_='jobtitle').getText()
-        data["location"] = soup.find('span', class_='location').getText()
-        data["company"] = soup.find('span', class_='company').getText()
-        data["description"] = soup.find('td',class_='snip').find('div').getText()
-
-        re_link = soup.find('a',class_='sl ws_label')['href'].split("&from=")[0]
-        re_link = head[:-1]+re_link
-        data["original_link"] = get_original_link(re_link)
-    except:
-        pass
-    return data
-
-def get_timestamp(time_str):
-    """
-    Calculate the timestamp from the time string.
-    
-    Args:
-        time_str (str): time string, like '2 hours ago'
-
-    Returns:
-        time_stamp (obj): timestamp object
-    """
-    if 'hour' in time_str:
-        lag = int(time_str.split('hour')[0])
-        delta = timedelta(hours=lag)
-        now = datetime.utcnow().replace(second=0,minute=0)
-        return now-delta
-    else:
-        return -1
-
-def get_original_link(url):
-    """
-    Get the original link of the job description.
-    
-    Args:
-        url (str): the link in Indeed database
-
-    Returns:
-        url (str): the original link to the job description
-    """
-    driver = webdriver.Chrome(chromedriver)
-    driver.get(url)
-    time.sleep(2)
-    original_url = driver.current_url
-    driver.quit()
-    return original_url
+        df1 = pd.DataFrame(news_results)
+        # df1.to_excel('new_method_results/news_rs.xlsx')
+        return news_list, df1
 
 
 if __name__ == "__main__":
-    get_jobs_of_title("data+scientist")
+    # list of websites and key features
+    day_limit = 1
+    NE = NewsExtractor(day_limit)
+    news_list, df = NE.batch_get_news(r'websites.xlsx', 'Sheet1')
+
