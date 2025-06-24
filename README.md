@@ -2,7 +2,7 @@
 
 The main file includes functions for collecting data from websites.
 
-The Excel file outlines key elements for each institution's news page:
+The websites file outlines key elements for each institution's news page:
 
     Institution: Name of the organization (e.g., ISED, NIST, NSF).
     
