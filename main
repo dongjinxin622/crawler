@@ -23,7 +23,7 @@ class NewsExtractor:
 
     def extract_web(self, news_list, title_name, link_name, link_class, time_name,
                     title_class=None, source_link=None, time_class=None):
-        # check all news and extract title, link and date遍历新闻列表项，提取新闻标题、链接和时间
+        # check all news and extract title, link and date
         for news_item in news_list:
             # extract title
             if title_class is None:
@@ -84,7 +84,6 @@ class NewsExtractor:
 
             # if news is released before time limitation, then print it
             if news_time >= time_limit:
-                # 打印提取的信息
                 print(f"Title: {title}")
                 print(f"Link: {link}")
                 print(f"Date: {news_time}")
@@ -132,13 +131,7 @@ class NewsExtractor:
         return news_list, df1
 
     def save_file(self, df1, path):
-        df1.to_excel(path)
-
-
-
-
-
-
+        df1.to_csv(path)
 
 
 if __name__ == "__main__":
@@ -146,6 +139,4 @@ if __name__ == "__main__":
     day_limit = 1
     NE = NewsExtractor(day_limit)
     news_list, df = NE.batch_get_news(r'websites.xlsx', 'Sheet1')
-    NE.save_file(df, path= "news_res.xlsx")
-   
-
+    NE.save_file(df, path= "news_res.csv")
