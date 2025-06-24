@@ -131,10 +131,21 @@ class NewsExtractor:
         # df1.to_excel('new_method_results/news_rs.xlsx')
         return news_list, df1
 
+    def save_file(self, df1, path):
+        df1.to_excel(path)
+
+
+
+
+
+
+
 
 if __name__ == "__main__":
     # list of websites and key features
     day_limit = 1
     NE = NewsExtractor(day_limit)
     news_list, df = NE.batch_get_news(r'websites.xlsx', 'Sheet1')
+    NE.save_file(df, path= "news_res.xlsx")
+   
 
